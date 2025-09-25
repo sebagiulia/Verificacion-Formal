@@ -36,20 +36,48 @@ let rec insert0 (x: int) (t: bst0) : bst0 =
     else if x < y then N (insert0 x l, y, r)
     else N (l, y, insert0 x r)
 
-let insert0_all_lt (x:int) (t:bst0) (y:int)
+let rec insert0_all_lt (x:int) (t:bst0) (y:int)
   : Lemma (requires all_lt y t /\ x < y)
           (ensures all_lt y (insert0 x t))
   =
-  admit()
+  match t with
+  | L -> ()
+  | N (l, z, r) ->
+    if x = z then ()
+    else if x < z then
+      insert0_all_lt x l y
+    else
+      insert0_all_lt x r y
 
-let insert0_all_gt (x:int) (t:bst0) (y:int)
+let rec insert0_all_gt (x:int) (t:bst0) (y:int)
   : Lemma (requires all_gt y t /\ x > y)
           (ensures all_gt y (insert0 x t))
   =
-  admit()
+  match t with
+  | L -> ()
+  | N (l, z, r) ->
+    if x = z then ()
+    else if x < z then
+      insert0_all_gt x l y
+    else
+      insert0_all_gt x r y
 
-let insert0_bst (x:int) (t:bst0) : Lemma (requires is_bst t) (ensures is_bst (insert0 x t)) =
-  admit()
+let rec insert0_bst (x:int) (t:bst0) : Lemma (requires is_bst t) (ensures is_bst (insert0 x t)) =
+  match t with
+  | L -> ()
+  | N (l, y, r) ->
+    if x = y then ()
+    else 
+    if x < y then
+    (
+      insert0_bst x l;
+      insert0_all_lt x l y
+    )
+    else
+    (
+      insert0_bst x r;
+      insert0_all_gt x r y
+    )
 
 let insert (x:int) (t:bst) : bst =
   insert0_bst x t;
@@ -58,6 +86,7 @@ let insert (x:int) (t:bst) : bst =
 (* Nota: al usar GTot nos aseguramos que esta función sólo se usa
 en contextos de especificación, y nunca en código ejecutable. ¿Hay otras
 funciones que pueden marcarse así? *)
+(* Pueden marcarse asi aquellas funciones que se llamen en contexto de tipos y de refinamientos *)
 let rec in_tree (x:int) (t:bst0) : GTot bool =
   match t with
   | L -> false
