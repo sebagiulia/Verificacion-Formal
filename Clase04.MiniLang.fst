@@ -42,17 +42,14 @@ let rec constant_fold (#ty:l_ty) (e : expr ty) : Tot (expr ty) (decreases e)=
   | EAdd m n -> EAdd (constant_fold m) (constant_fold n)
   | EEq m n -> EEq (constant_fold m) (constant_fold n)
   | EIf c t e -> EIf (constant_fold c) (constant_fold t) (constant_fold e)
-  | _ -> e
+  | EInt i -> EInt i
+  | EBool b -> EBool b
 
 (* Correctitud de la optimización de constant folding *)
 let rec constant_fold_ok (#ty:l_ty) (e : expr ty)
   : Lemma (ensures eval e == eval (constant_fold e)) (decreases e)
 = 
   match e with
-  | EAdd (EInt m) (EInt n) -> ()
-  | EEq (EInt m) (EInt n) -> ()
-  | EIf (EBool true) e2 _ -> constant_fold_ok e2
-  | EIf (EBool false) _ e3  -> constant_fold_ok e3
   | EAdd m n -> 
     constant_fold_ok m;
     constant_fold_ok n
@@ -63,4 +60,5 @@ let rec constant_fold_ok (#ty:l_ty) (e : expr ty)
     constant_fold_ok c;
     constant_fold_ok t;
     constant_fold_ok e
-  | _ -> ()
+  | EInt _ -> ()
+  | EBool _ -> ()
