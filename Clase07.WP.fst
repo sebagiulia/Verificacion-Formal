@@ -153,9 +153,10 @@ let rec hoare_ok (p:stmt) (pre:cond) (post:cond) (s0 s1 : state) (e_pf : runsto 
           hoare_ok (While inv' c b) inv (fun s -> inv s /\ eval_expr s c =!= 0) mid s1 pf_w pf
       | R_While_False _ -> ()
     )
-  | _ -> admit()
-          
-
+  | H_Weaken (#_) (#_) (#_) pre' post' h sq1 sq2 -> 
+      hoare_ok _ _ _ s0 s1 e_pf h 
+  | H_Pure (#_) (#_) (#_) (pre0) h -> 
+      hoare_ok _ _ _ s0 s1 e_pf h 
 
 
 
@@ -177,10 +178,11 @@ let hoare_weaken_post (pre:cond) (p:stmt) (post post' : cond)
 (* Cómputo de WPs *)
 
 let assign_wp (x:var) (e:expr) : wp =
-  admit()
+  fun post s0 -> post (override s0 x (eval_expr s0 e))
 
 let ite_wp (c:expr) (wp_t wp_e : wp) : wp =
-  admit()
+  fun post s0 -> (eval_expr s0 c = 0 /\ wp_t post s0) \/ 
+                 (eval_expr s0 c <> 0 /\ wp_e post s0)      
 
 let while_wp (inv:cond) (c:expr) (wp_b:wp) : wp =
   fun post s ->
@@ -188,13 +190,17 @@ let while_wp (inv:cond) (c:expr) (wp_b:wp) : wp =
     /\ (forall s. eval_expr s c == 0 /\ inv s ==> wp_b inv s)  // invariante es induc
     /\ (forall s'. inv s' /\ eval_expr s' c =!= 0 ==> post s') // al finalizar implica post
 
+
+
 let rec cwp (p:stmt) : wp =
   match p with
   | Assign x e -> assign_wp x e
-  | Skip -> admit()
-  | Seq p q -> admit()
+  | Skip -> fun post s0 -> post s0
+  | Seq p q -> fun post s0 ->
+      cwp p (fun s1 -> cwp q post s1) s0   
   | IfZ c t e -> ite_wp c (cwp t) (cwp e)
   | While inv c b -> while_wp inv c (cwp b)
+
 
 (* Correctitud de WPs *)
 let rec cwp_ok (p:stmt) (post : cond)
@@ -233,13 +239,44 @@ let rec cwp_ok (p:stmt) (post : cond)
         H_Weaken _ _ pf0 () ()
       in
       pf1
-    | _ -> admit()
+    | Skip -> let pre = cwp p post in
+              let pf = H_Skip post in 
+              H_Weaken pre _ pf _ _
+    | Assign var expr -> let pre' = cwp p post in
+                           let pf = H_Assign #var #expr #post in
+                           H_Weaken pre' _ pf _ _
+    | IfZ c t e ->  let pf_t : hoare (fun s -> cwp p post s /\ eval_expr s c = 0) t post = 
+                        hoare_strengthen_pre (cwp t post)
+                                             (fun s -> cwp p post s /\ eval_expr s c = 0)
+                                             t
+                                             post
+                                             _
+                                             (cwp_ok t post)
+                                             in
+                    let pf_e : hoare (fun s -> cwp p post s /\ eval_expr s c <> 0) e post = 
+                        hoare_strengthen_pre (cwp e post)
+                                             (fun s -> cwp p post s /\ eval_expr s c <> 0)
+                                             e
+                                             post
+                                             _
+                                             (cwp_ok e post) in
+                    H_If pf_t pf_e
+    | Seq w q -> let mid:cond = (cwp q post) in
+                 let pre:cond = (cwp w mid) in
+                 let hwp_w : hoare (cwp w (cwp q post)) w (cwp q post)  = cwp_ok w (cwp q post) in
+                 let hwq_w' : hoare (cwp p post) w mid =
+                  assume(forall s. cwp p post s ==> cwp w (cwp q post) s);
+                  H_Weaken (cwp p post) (cwp q post) hwp_w _ _ in
+                 let hwq_q : hoare mid q post = cwp_ok q post in
+                 H_Seq #w #q #(cwp p post) #mid #post hwq_w' hwq_q
+    
+              
 
 (* Agregar 1 a x. *)
 let add1 =
   Assign "x" (Plus (Var "x") (Const 1))
 let wp_add1 : wp = cwp add1
-//let _ = assert (forall s. s "x" = 10 <==> wp_add1 (fun s -> s "x" = 11) s)
+let _ = assert (forall s. s "x" = 10 <==> wp_add1 (fun s -> s "x" = 11) s)
 (* DESCOMENTAR *)
 (* Arriba garantizamos que la WP para x=11 es x=10. Debería andar luego de completar
 definiciones. *)
@@ -249,7 +286,7 @@ let add2 =
   Assign "y" (Plus (Var "x") (Const 1)) `Seq`
   Assign "x" (Plus (Var "y") (Const 1))
 let wp_add2 : wp = cwp add2
-// let _ = assert (forall s. ?????????? <==> wp_add2 (fun s -> s "x" = 12) s)
+let _ = assert (forall s. s "x" = 10 <==> wp_add2 (fun s -> s "x" = 12) s)
 (* Encontrar la WP para la postcondición x=12. ¿Qué pasa con y? *)
 
 (* Intercambiando dos variables via una tercera. *)
@@ -260,7 +297,7 @@ let swap : stmt =
 let wp_swap : wp = cwp swap
 (* Demuestre que el programa intercambia x e y, demostrando un teorema sobre
 la WP *paramétrico* sobre x e y. *)
-// let _ = assert (forall s x0 y0.  ????????   ==> wp_swap (fun s -> s "x" = y0 /\ s "y" = x0) s)
+let _ = assert (forall s x0 y0.  s "x" = x0 /\ s "y" = y0    ==> wp_swap (fun s -> s "x" = y0 /\ s "y" = x0) s)
 
 (* Opcional: escriba el programa siguiente
      x = x + y;
@@ -276,22 +313,22 @@ let move_x_y : stmt =
        y := y + 1 *)
   Assign "y" (Const 0) `Seq`
   While 
-    (admit()) // invariante
+    (fun s -> s "x" >= s "y")
     (Lt (Var "y") (Var "x"))
     (Assign "y" (Plus (Var "y") (Const 1)))
 let wp_move_x_y : wp = cwp move_x_y
 let pre_move = wp_move_x_y (fun s -> s "x" == s "y")
 (* Encuentre la WP para la postcondición x=y. *)
-// let _ = assert (forall s. ?????????? <==> pre_move s)
+ let _ = assert (forall s. s "x" >= 0 <==> pre_move s)
 
-// let move_x_y_ok :
-//   hoare (fun s -> s "x" >= 0) move_x_y (fun s -> s "y" = s "x")
-// = hoare_strengthen_pre  _ _ _ _ () <| cwp_ok move_x_y (fun s -> s "y" = s "x")
+ let move_x_y_ok :
+   hoare (fun s -> s "x" >= 0) move_x_y (fun s -> s "y" = s "x")
+ = hoare_strengthen_pre  _ _ _ _ () <| cwp_ok move_x_y (fun s -> s "y" = s "x")
 (* Armando una tripleta a partir del lema anterior. Esto puede hacerse para
 cada uno de los programas anteriores. Descomentar, debería andar. *)
 
 (* Cuenta regresiva. Encuentre la WP para la postcondición x=0. ¿Cuál invariante debe usar? *)
-let countdown_inv : cond = admit()
+let countdown_inv : cond = fun s -> s "x" >= 0
 let countdown : stmt =
   While
     countdown_inv
@@ -299,7 +336,21 @@ let countdown : stmt =
     (Assign "x" (Plus (Var "x") (Const (-1))))
 let wp_countdown : wp = cwp countdown
 let pre_countdown = wp_countdown (fun s -> s "x" == 0)
-let monotonia (p:stmt) (q1 q2 : cond)
+
+let rec monotonia (p:stmt) (q1 q2 : cond)
   : Lemma (requires forall s. q1 s ==> q2 s)
           (ensures forall s. cwp p q1 s ==> cwp p q2 s)
-  = admit()
+  = match p with
+    | Assign x e -> ()
+    | Skip -> ()
+    | Seq p1 p2 -> 
+        monotonia p2 q1 q2;
+        monotonia p1 (cwp p2 q1) (cwp p2 q2);
+        assert(forall s. (cwp p1 (cwp p2 q1)) s ==> (cwp p1 (cwp p2 q2)) s);
+        assume(forall s. (cwp p1 (cwp p2 q1)) s == (cwp p q1) s);
+        assume(forall s. (cwp p1 (cwp p2 q2)) s == (cwp p q2) s)
+    | IfZ c t e ->
+        monotonia t q1 q2;
+        monotonia e q1 q2
+    | While inv c b ->
+        monotonia b inv inv
