@@ -346,7 +346,6 @@ let rec monotonia (p:stmt) (q1 q2 : cond)
     | Seq p1 p2 -> 
         monotonia p2 q1 q2;
         monotonia p1 (cwp p2 q1) (cwp p2 q2);
-        assert(forall s. (cwp p1 (cwp p2 q1)) s ==> (cwp p1 (cwp p2 q2)) s);
         assume(forall s. (cwp p1 (cwp p2 q1)) s == (cwp p q1) s);
         assume(forall s. (cwp p1 (cwp p2 q2)) s == (cwp p q2) s)
     | IfZ c t e ->
