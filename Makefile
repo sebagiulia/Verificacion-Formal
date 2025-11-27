@@ -51,3 +51,7 @@ Clase08_Eff.exe: Clase08.Eff.fst
 	$(FSTAR) $< --codegen OCaml --extract_module Clase08.Eff --odir Clase08_ocaml
 	cd Clase08_ocaml && $(FSTAR) --ocamlenv dune build
 	install Clase08_ocaml/_build/default/main.exe $@
+
+.PHONY: pulse
+pulse: pulse/Makefile
+	$(MAKE) -C pulse ADMIT=1
