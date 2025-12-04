@@ -21,7 +21,7 @@ let test2 (#a:Type) (x:int) : Exn int (requires True) (ensures fun r -> True) =
   if x = 0 then
     raise DivZero;
   assert (x <> 0);
-  let y = 1 / x in
+  let y = 1 / x in 
   y
 
 // 
@@ -72,7 +72,7 @@ let find_in_cache (x y : nat) : ML (option (r:int{r == gcd x y})) =
 (* Versión memoizada, garantizando que el resultado es igual a la versión pura. *)
 let memo_gcd (x y : nat) : ML (r:int{r == gcd x y}) =
   match find_in_cache x y with
-  | Some r -> r
+  | Some r -> r 
   | None ->
     let r = gcd x y in
     cache := ( x, y, r ) :: !cache;
